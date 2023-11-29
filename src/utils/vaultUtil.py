@@ -1,51 +1,65 @@
 import requests
 
-VAULT_URL = "http://127.0.0.1:8200"
-ROLE_ID = "bc3426dc-dd40-b227-8d82-730b26a360f6"
-SECRET_ID = "10a5826e-6dc1-3c32-5b05-2847fc7513df"
-SECRET_PATH = "secret/data/snow"
+class VaultClient:
+    def __init__(self, vault_url, role_id, secret_id, secret_path):
+        self.vault_url = vault_url
+        self.role_id = role_id
+        self.secret_id = secret_id
+        self.secret_path = secret_path
 
+    def authenticate_with_approle(self):
+        auth_url = f"{self.vault_url}/v1/auth/approle/login"
+        auth_data = {
+            "role_id": self.role_id,
+            "secret_id": self.secret_id
+        }
 
-def authenticate_with_approle():
-    auth_url = f"{VAULT_URL}/v1/auth/approle/login"
-    auth_data = {
-        "role_id": ROLE_ID,
-        "secret_id": SECRET_ID
-    }
+        try:
+            auth_response = requests.post(auth_url, json=auth_data)
+            auth_response.raise_for_status()
 
-    try:
-        auth_response = requests.post(auth_url, json=auth_data)
-        auth_response.raise_for_status()
+            token = auth_response.json()["auth"]["client_token"]
+            print("token=======", token)
+            return token
 
-        token = auth_response.json()["auth"]["client_token"]
-        print("token=======", token)
-        return token
+        except requests.exceptions.RequestException as e:
+            print(f"Authentication error: {e}")
+            return None
 
-    except requests.exceptions.RequestException as e:
-        print(f"Authentication error: {e}")
-        return None
+    def get_secret(self, token):
+        headers = {
+            "X-Vault-Token": token,
+        }
 
+        url = f"{self.vault_url}/v1/{self.secret_path}"
 
-def get_secret(token):
-    headers = {
-        "X-Vault-Token": token,
-    }
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
 
-    url = f"{VAULT_URL}/v1/{SECRET_PATH}"
+            secret_data = response.json()["data"]
+            return secret_data
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"Error retrieving secret: {e}")
+            return None
 
-        secret_data = response.json()["data"]
-        return secret_data
+if __name__ == "__main__":
+    VAULT_URL = "http://127.0.0.1:8200"
+    ROLE_ID = "bc3426dc-dd40-b227-8d82-730b26a360f6"
+    SECRET_ID = "10a5826e-6dc1-3c32-5b05-2847fc7513df"
+    SECRET_PATH = "secret/data/aws"
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error retrieving secret: {e}")
-        return None
+    vault_client = VaultClient(VAULT_URL, ROLE_ID, SECRET_ID, SECRET_PATH)
 
+    token = vault_client.authenticate_with_approle()
 
-token = authenticate_with_approle()
-secret_data = get_secret(token)
+    if token:
+        secret_data = vault_client.get_secret(token)
 
-print(secret_data)
+        if secret_data:
+            print("Secret data:", secret_data)
+        else:
+            print("Failed to retrieve secret.")
+    else:
+        print("Failed to authenticate with AppRole.")

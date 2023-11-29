@@ -1,2 +1,6 @@
 import boto3
-print("Test")
+import vaultUtil import authenticate_with_approle  
+
+test = authenticate_with_approle()
+
+print(test)
